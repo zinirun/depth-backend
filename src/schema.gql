@@ -1,0 +1,170 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type User {
+  _id: ID!
+  _access: ID
+  company: Company!
+  email: String!
+  name: String!
+  role: UserRole!
+  createdAt: Date!
+  updatedAt: Date!
+}
+
+enum UserRole {
+  Common
+  Manager
+  Admin
+}
+
+"""Date custom scalar type"""
+scalar Date
+
+type Company {
+  _id: ID!
+  name: String!
+  email: String!
+  users: [User!]!
+  createdAt: Date!
+  updatedAt: Date!
+}
+
+type Project {
+  _id: ID!
+  company: Company!
+  title: String!
+  accesses: [User!]!
+  manager: User!
+  createdAt: Date!
+  updatedAt: Date!
+}
+
+type TaskComment {
+  author: User!
+  content: String!
+}
+
+type DateRange {
+  from: Date
+  to: Date
+}
+
+type Task {
+  _id: ID!
+  author: User!
+  title: String!
+  content: String
+  project: Project!
+  isTopDepth: Boolean!
+  childrens: [Task!]!
+  involvedUsers: [User!]!
+  comments: [TaskComment!]!
+  deadline: DateRange
+  status: TaskStatus
+  createdAt: Date!
+  updatedAt: Date!
+}
+
+enum TaskStatus {
+  Ready
+  OnGoing
+  Done
+}
+
+type TaskMeta {
+  _id: ID!
+  author: User!
+  title: String!
+  content: String
+  isTopDepth: Boolean!
+  childrens: [TaskMeta!]!
+  involvedUsers: [User!]!
+  comments: [ID!]!
+  deadline: DateRange
+  createdAt: Date!
+}
+
+type Query {
+  project(id: ID!): Project!
+  projects: [Project!]!
+  login(input: LoginInput!): User!
+  task(id: ID!): Task!
+  tasksByProjectId(projectId: ID!): [TaskMeta!]!
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+type Mutation {
+  createProject(project: CreateProjectInput!): Project!
+  updateProject(project: UpdateProjectInput!): Project!
+  deleteProject(id: ID!): ID!
+  restoreProject(id: ID!): ID!
+  inviteProject(id: ID!, userIds: [ID!]!): Project!
+  disinviteProject(id: ID!, userIds: [ID!]!): Project!
+  createCompany(company: CreateCompanyInput!): Company!
+  createUser(user: CreateUserInput!): User!
+  createTask(task: CreateTaskInput!): Task!
+  updateTask(task: UpdateTaskInput!): Task!
+  deleteTask(id: ID!): ID!
+  restoreTask(id: ID!): ID!
+  moveTaskChildren(input: MoveTaskChildrenInput!): [Task!]!
+}
+
+input CreateProjectInput {
+  title: String!
+  accesses: [ID!]!
+}
+
+input UpdateProjectInput {
+  id: String!
+  title: String!
+}
+
+input CreateCompanyInput {
+  name: String!
+  email: String!
+}
+
+input CreateUserInput {
+  companyId: ID!
+  email: String!
+  password: String!
+  name: String!
+  role: UserRole!
+}
+
+input CreateTaskInput {
+  projectId: ID!
+  parentTaskId: ID
+  sortAfterTaskId: ID
+  title: String!
+  content: String
+  deadline: DateRangeInput
+  involvedUserIds: [String!]
+}
+
+input DateRangeInput {
+  from: Date
+  to: Date
+}
+
+input UpdateTaskInput {
+  id: ID!
+  title: String
+  content: String
+  deadline: DateRangeInput
+  involvedUserIds: [String]
+  status: TaskStatus
+}
+
+input MoveTaskChildrenInput {
+  fromParentId: String!
+  toParentId: String!
+  childrenId: String!
+  sortAfterId: String
+}
