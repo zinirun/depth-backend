@@ -6,17 +6,31 @@ type User {
   _id: ID!
   _access: ID
   company: Company!
+  authType: UserAuthType!
+  oauthProvider: String
+  oauthId: String
   email: String!
-  name: String!
+  name: String
   role: UserRole!
+  inviteStatus: UserInviteStatus!
   createdAt: Date!
   updatedAt: Date!
+}
+
+enum UserAuthType {
+  Plain
+  Google
 }
 
 enum UserRole {
   Common
   Manager
   Admin
+}
+
+enum UserInviteStatus {
+  Pending
+  Assigned
 }
 
 """Date custom scalar type"""
@@ -39,6 +53,7 @@ type Project {
   manager: User!
   createdAt: Date!
   updatedAt: Date!
+  taskUpdatedAt: Date
 }
 
 type TaskComment {
@@ -90,6 +105,8 @@ type Query {
   project(id: ID!): Project!
   projects: [Project!]!
   login(input: LoginInput!): User!
+  me: User!
+  logout: Boolean!
   task(id: ID!): Task!
   tasksByProjectId(projectId: ID!): [TaskMeta!]!
 }
@@ -107,7 +124,9 @@ type Mutation {
   inviteProject(id: ID!, userIds: [ID!]!): Project!
   disinviteProject(id: ID!, userIds: [ID!]!): Project!
   createCompany(company: CreateCompanyInput!): Company!
-  createUser(user: CreateUserInput!): User!
+  inviteUserToCompany(user: CreateUserInput!): Company!
+  assignInviteWithPlain(id: ID!, input: AssignPlainUserInput!): User!
+  assignInviteWithOAuth(id: ID!): User!
   createTask(task: CreateTaskInput!): Task!
   updateTask(task: UpdateTaskInput!): Task!
   deleteTask(id: ID!): ID!
@@ -131,11 +150,13 @@ input CreateCompanyInput {
 }
 
 input CreateUserInput {
-  companyId: ID!
   email: String!
-  password: String!
-  name: String!
   role: UserRole!
+}
+
+input AssignPlainUserInput {
+  name: String!
+  password: String!
 }
 
 input CreateTaskInput {

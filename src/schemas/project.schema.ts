@@ -54,6 +54,12 @@ export class Project {
 
     @Field(() => DateScalar)
     updatedAt: Date;
+
+    @Prop()
+    @Field(() => DateScalar, {
+        nullable: true,
+    })
+    taskUpdatedAt: Date;
 }
 
 export type ProjectDocument = Project & Document;

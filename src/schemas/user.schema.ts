@@ -7,6 +7,8 @@ import { UserRole } from 'src/lib/enum/user-role.enum';
 import { DateScalar } from 'src/lib/scalars/date.scalar';
 import { Schemas } from './@define';
 import { Company } from './company.schema';
+import { UserAuthType } from 'src/lib/enum/user-auth-type.enum';
+import { UserInviteStatus } from 'src/lib/enum/user-invite-status.enum';
 
 @Schema({
     collection: Schemas.User.name,
@@ -31,6 +33,26 @@ export class User {
     company: Company;
 
     @Prop({
+        required: true,
+        default: UserAuthType.Plain,
+        enum: Object.values(UserAuthType),
+    })
+    @Field(() => UserAuthType)
+    authType: UserAuthType;
+
+    @Prop()
+    @Field({
+        nullable: true,
+    })
+    oauthProvider?: string;
+
+    @Prop()
+    @Field({
+        nullable: true,
+    })
+    oauthId?: string;
+
+    @Prop({
         index: true,
         required: true,
         trim: true,
@@ -39,17 +61,18 @@ export class User {
     @Field()
     email: string;
 
-    @Prop({
-        required: true,
-    })
-    password: string;
+    // doesn't need in oauth type
+    @Prop()
+    password?: string;
 
     @Prop({
-        required: true,
         trim: true,
+        nullable: true,
     })
-    @Field()
-    name: string;
+    @Field({
+        nullable: true,
+    })
+    name?: string;
 
     @Prop({
         required: true,
@@ -58,6 +81,14 @@ export class User {
     })
     @Field(() => UserRole)
     role: UserRole;
+
+    @Prop({
+        required: true,
+        default: UserInviteStatus.Pending,
+        enum: Object.values(UserInviteStatus),
+    })
+    @Field(() => UserInviteStatus)
+    inviteStatus: UserInviteStatus;
 
     @Field(() => DateScalar)
     createdAt: Date;

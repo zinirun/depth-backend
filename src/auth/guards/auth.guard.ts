@@ -33,7 +33,7 @@ export class AuthGuard implements CanActivate {
 
         const token =
             request?.headers?.authorization?.split(' ')[1] ||
-            (request?.cookies && request?.cookies['x-token']);
+            (request?.cookies && request?.cookies['x-access']);
 
         const systemAuth = this.reflector.getAllAndOverride<boolean>(SYSTEM_AUTH, [
             context.getHandler(),

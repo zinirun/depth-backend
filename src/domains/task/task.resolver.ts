@@ -75,7 +75,7 @@ export class TaskResolver {
     async moveChildren(
         @GetUser() user: User,
         @Args('input', { type: () => MoveTaskChildrenInput }) input: MoveTaskChildrenInput,
-    ): Promise<[Task, Task]> {
+    ): Promise<[Task, Task?]> {
         return await this.taskService.moveChildren(user, input);
     }
 }

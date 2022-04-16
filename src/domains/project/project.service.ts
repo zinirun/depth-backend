@@ -155,6 +155,23 @@ export class ProjectService {
         return await this.getOneOrThrowById(id);
     }
 
+    async updateTaskUpdatedAt(id: string): Promise<boolean> {
+        return (
+            (await this.projectModel
+                .updateOne(
+                    {
+                        _id: id,
+                    },
+                    {
+                        $set: {
+                            taskUpdatedAt: new Date(),
+                        },
+                    },
+                )
+                .exec()) && true
+        );
+    }
+
     throwIfCannotAccess(project: Project, userId: string): void {
         if (
             !(

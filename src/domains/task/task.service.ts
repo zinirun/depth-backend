@@ -15,12 +15,17 @@ import { TaskMeta } from './dto/task-meta.dto';
 import { UpdateTaskInput } from './dto/update-task-input.dto';
 import { ClientSession } from 'mongoose';
 import { MoveTaskChildrenInput } from './dto/move-task-children-input.dto';
+import { TaskComment, TaskCommentDocument } from 'src/schemas/task-comment.schema';
+import { CreateTaskCommentInput } from './dto/create-task-comment-input.dto';
+import { UpdateTaskCommentInput } from './dto/update-task-comment-input.dto';
 
 @Injectable()
 export class TaskService {
     constructor(
         @InjectConnection() private connection: Connection,
         @InjectModel(Task.name) private taskModel: SoftDeleteModel<TaskDocument>,
+        @InjectModel(TaskComment.name)
+        private taskCommentModel: SoftDeleteModel<TaskCommentDocument>,
         private readonly projectService: ProjectService,
     ) {}
 
@@ -49,6 +54,8 @@ export class TaskService {
                 const { _id } = await newTask.save({ session });
                 await this.addChildren(parentTaskId, _id, sortAfterTaskId, session);
                 await session.commitTransaction();
+
+                await this.projectService.updateTaskUpdatedAt(projectId);
                 return await this.getOneOrThrowById(_id);
             } catch (err) {
                 console.error(err);
@@ -151,6 +158,7 @@ export class TaskService {
                 },
             )
             .exec();
+        await this.projectService.updateTaskUpdatedAt(task.project._id);
         return await this.getOneOrThrowById(id);
     }
 
@@ -167,6 +175,91 @@ export class TaskService {
         const task = await this.taskModel.findDeletedById(id);
         this.throwIfIsNotAuthor(task, requesterId);
         await this.taskModel.restore({
+            _id: id,
+        });
+        return id;
+    }
+
+    async createComment(input: CreateTaskCommentInput, user: User): Promise<TaskComment> {
+        const { taskId, content } = input;
+        const task = await this.getOneOrThrowById(taskId);
+        await this.projectService.getOneAndCheckAccessOrThrowById(task.project._id, user._id);
+
+        const newComment = new this.taskCommentModel({
+            author: user._id,
+            content,
+        });
+
+        const session = await this.connection.startSession();
+        session.startTransaction();
+        try {
+            const { _id: newCommentId } = await newComment.save({ session });
+            await this.taskModel
+                .updateOne(
+                    {
+                        _id: task._id,
+                    },
+                    {
+                        $set: {
+                            comments: { ...task.comments, newCommentId },
+                        },
+                    },
+                )
+                .session(session)
+                .exec();
+            await session.commitTransaction();
+            return await this.getOneCommentOrThrowById(newCommentId);
+        } catch (err) {
+            console.error(err);
+            session.abortTransaction();
+            throw new InternalServerErrorException('Transaction aborted');
+        } finally {
+            session.endSession();
+        }
+    }
+
+    async getOneCommentOrThrowById(id: string): Promise<TaskComment> {
+        const comment = await this.taskCommentModel.findById(id).populate('author').lean().exec();
+        if (!comment) {
+            throw new NotFoundException('Comment not exists');
+        }
+        return comment;
+    }
+
+    async updateComment(input: UpdateTaskCommentInput, user: User): Promise<TaskComment> {
+        const { id, content } = input;
+        const comment = await this.getOneCommentOrThrowById(id);
+        this.throwIfIsNotAuthor(comment, user._id);
+
+        await this.taskCommentModel
+            .updateOne(
+                {
+                    _id: id,
+                },
+                {
+                    $set: {
+                        content,
+                    },
+                },
+            )
+            .exec();
+
+        return await this.getOneCommentOrThrowById(id);
+    }
+
+    async removeComment(id: string, requesterId: string): Promise<string> {
+        const comment = await this.getOneCommentOrThrowById(id);
+        this.throwIfIsNotAuthor(comment, requesterId);
+        await this.taskCommentModel.softDelete({
+            _id: id,
+        });
+        return id;
+    }
+
+    async restoreComment(id: string, requesterId: string): Promise<string> {
+        const comment = await this.taskCommentModel.findDeletedById(id);
+        this.throwIfIsNotAuthor(comment, requesterId);
+        await this.taskCommentModel.restore({
             _id: id,
         });
         return id;
@@ -207,7 +300,6 @@ export class TaskService {
                         childrens,
                     },
                 },
-                { session },
             )
             .session(session || undefined)
             .exec();
@@ -237,77 +329,113 @@ export class TaskService {
     async moveChildren(
         user: User,
         { fromParentId, toParentId, childrenId, sortAfterId }: MoveTaskChildrenInput,
-    ): Promise<[Task, Task]> {
+    ): Promise<[Task, Task?]> {
         const fromParent = await this.getOneOrThrowById(fromParentId);
-        const toParent = await this.getOneOrThrowById(toParentId);
-
         await this.projectService.getOneAndCheckAccessOrThrowById(fromParent.project._id, user._id);
-        await this.projectService.getOneAndCheckAccessOrThrowById(toParent.project._id, user._id);
 
-        const fromChildrens = fromParent.childrens.filter(
-            (children) => String(children._id) !== String(childrenId),
-        );
-        let toChildrens = [...toParent.childrens, childrenId];
-
-        if (sortAfterId) {
-            const sortAfterIndex = toParent.childrens.findIndex(
-                (children) => String(children._id) === sortAfterId,
-            );
-            if (sortAfterIndex !== -1) {
-                toChildrens = [
-                    ...toParent.childrens.slice(0, sortAfterIndex + 1),
-                    childrenId,
-                    ...toParent.childrens.slice(sortAfterIndex + 1),
-                ];
-            } else {
-                throw new BadRequestException('Sorting task not exists');
+        if (fromParentId === toParentId) {
+            // move in same parent - just update sorting
+            if (sortAfterId) {
+                const sortAfterIndex = fromParent.childrens.findIndex(
+                    (children) => String(children._id) === sortAfterId,
+                );
+                if (sortAfterIndex !== -1) {
+                    const childrens = [
+                        ...fromParent.childrens.slice(0, sortAfterIndex + 1),
+                        childrenId,
+                        ...fromParent.childrens.slice(sortAfterIndex + 1),
+                    ];
+                    await this.taskModel
+                        .updateOne(
+                            {
+                                _id: fromParentId,
+                            },
+                            {
+                                $set: {
+                                    childrens,
+                                },
+                            },
+                        )
+                        .exec();
+                } else {
+                    throw new BadRequestException('Sorting task not exists');
+                }
             }
-        }
+            return [await this.getOneOrThrowById(fromParentId)];
+        } else {
+            // move to another parent
+            const toParent = await this.getOneOrThrowById(toParentId);
 
-        const session = await this.connection.startSession();
-        session.startTransaction();
-        try {
-            await this.taskModel
-                .updateOne(
-                    {
-                        _id: fromParentId,
-                    },
-                    {
-                        $set: {
-                            childrens: fromChildrens,
+            await this.projectService.getOneAndCheckAccessOrThrowById(
+                toParent.project._id,
+                user._id,
+            );
+
+            const fromChildrens = fromParent.childrens.filter(
+                (children) => String(children._id) !== String(childrenId),
+            );
+            let toChildrens = [...toParent.childrens, childrenId];
+
+            if (sortAfterId) {
+                const sortAfterIndex = toParent.childrens.findIndex(
+                    (children) => String(children._id) === sortAfterId,
+                );
+                if (sortAfterIndex !== -1) {
+                    toChildrens = [
+                        ...toParent.childrens.slice(0, sortAfterIndex + 1),
+                        childrenId,
+                        ...toParent.childrens.slice(sortAfterIndex + 1),
+                    ];
+                } else {
+                    throw new BadRequestException('Sorting task not exists');
+                }
+            }
+
+            const session = await this.connection.startSession();
+            session.startTransaction();
+            try {
+                await this.taskModel
+                    .updateOne(
+                        {
+                            _id: fromParentId,
                         },
-                    },
-                )
-                .session(session)
-                .exec();
-            await this.taskModel
-                .updateOne(
-                    {
-                        _id: toParentId,
-                    },
-                    {
-                        $set: {
-                            childrens: toChildrens,
+                        {
+                            $set: {
+                                childrens: fromChildrens,
+                            },
                         },
-                    },
-                )
-                .session(session)
-                .exec();
-            await session.commitTransaction();
-            return [
-                await this.getOneOrThrowById(fromParentId),
-                await this.getOneOrThrowById(toParentId),
-            ];
-        } catch (err) {
-            console.error(err);
-            session.abortTransaction();
-            throw new InternalServerErrorException('Transaction aborted');
-        } finally {
-            session.endSession();
+                    )
+                    .session(session)
+                    .exec();
+                await this.taskModel
+                    .updateOne(
+                        {
+                            _id: toParentId,
+                        },
+                        {
+                            $set: {
+                                childrens: toChildrens,
+                            },
+                        },
+                    )
+                    .session(session)
+                    .exec();
+                await session.commitTransaction();
+                return [
+                    await this.getOneOrThrowById(fromParentId),
+                    await this.getOneOrThrowById(toParentId),
+                ];
+            } catch (err) {
+                console.error(err);
+                session.abortTransaction();
+                throw new InternalServerErrorException('Transaction aborted');
+            } finally {
+                session.endSession();
+            }
         }
     }
 
-    throwIfIsNotAuthor(task: Task, userId: string): void {
+    throwIfIsNotAuthor(task: Task | TaskComment, userId: string): void {
         if (!(String(task.author._id) === String(userId))) {
             throw new NotFoundException('Cannot access');
         }
