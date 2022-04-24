@@ -1,10 +1,12 @@
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { GetUser } from 'src/lib/decorators/get-user.decorator';
+import { TaskComment } from 'src/schemas/task-comment.schema';
 import { Task } from 'src/schemas/task.schema';
 import { User } from 'src/schemas/user.schema';
+import { CreateTaskCommentInput } from './dto/create-task-comment-input.dto';
 import { CreateTaskInput } from './dto/create-task-input.dto';
 import { MoveTaskChildrenInput } from './dto/move-task-children-input.dto';
-import { TaskMeta } from './dto/task-meta.dto';
+import { UpdateTaskCommentInput } from './dto/update-task-comment-input.dto';
 import { UpdateTaskInput } from './dto/update-task-input.dto';
 import { TaskService } from './task.service';
 
@@ -29,14 +31,14 @@ export class TaskResolver {
         return await this.taskService.getOneAndCheckAccessOrThrowById(id, user._id);
     }
 
-    @Query(() => [TaskMeta], {
+    @Query(() => [Task], {
         name: 'tasksByProjectId',
     })
-    async getAllMetaByProjectId(
+    async getAllByProjectId(
         @GetUser() user: User,
         @Args('projectId', { type: () => ID }) projectId: string,
-    ): Promise<TaskMeta[]> {
-        return await this.taskService.getAllMetaByProjectIdAndUserId(projectId, user._id);
+    ): Promise<Task[]> {
+        return await this.taskService.getAllByProjectIdAndUserId(projectId, user._id);
     }
 
     @Mutation(() => Task, {
@@ -67,6 +69,36 @@ export class TaskResolver {
         @Args('id', { type: () => ID }) id: string,
     ): Promise<string> {
         return await this.taskService.restore(id, user._id);
+    }
+
+    @Mutation(() => TaskComment, {
+        name: 'createTaskComment',
+    })
+    async createComment(
+        @GetUser() user: User,
+        @Args('comment', { type: () => CreateTaskCommentInput }) input: CreateTaskCommentInput,
+    ): Promise<TaskComment> {
+        return await this.taskService.createComment(input, user);
+    }
+
+    @Mutation(() => TaskComment, {
+        name: 'updateTaskComment',
+    })
+    async updateComment(
+        @GetUser() user: User,
+        @Args('comment', { type: () => UpdateTaskCommentInput }) input: UpdateTaskCommentInput,
+    ): Promise<TaskComment> {
+        return await this.taskService.updateComment(input, user);
+    }
+
+    @Mutation(() => ID, {
+        name: 'deleteTaskComment',
+    })
+    async deleteComment(
+        @GetUser() user: User,
+        @Args('id', { type: () => ID }) id: string,
+    ): Promise<string> {
+        return await this.taskService.removeComment(id, user._id);
     }
 
     @Mutation(() => [Task], {

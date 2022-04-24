@@ -2,10 +2,16 @@ import { Field, InputType } from '@nestjs/graphql';
 
 @InputType()
 export class MoveTaskChildrenInput {
-    @Field(() => String)
+    // if null, fromParent is top depth task
+    @Field(() => String, {
+        nullable: true,
+    })
     readonly fromParentId: string;
 
-    @Field(() => String)
+    // if null, toParent is top depth task
+    @Field(() => String, {
+        nullable: true,
+    })
     readonly toParentId: string;
 
     @Field(() => String)

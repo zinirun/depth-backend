@@ -25,11 +25,12 @@ export class Task {
     author: User;
 
     @Prop({
-        required: true,
         trim: true,
     })
-    @Field()
-    title: string;
+    @Field({
+        nullable: true,
+    })
+    title?: string;
 
     @Prop()
     @Field({
@@ -98,12 +99,17 @@ export const TaskSchema = SchemaFactory.createForClass(Task)
             {
                 path: 'childrens',
                 populate: [
-                    // ignore comments
                     {
                         path: 'author',
                     },
                     {
                         path: 'involvedUsers',
+                    },
+                    {
+                        path: 'project',
+                    },
+                    {
+                        path: 'comments',
                     },
                 ],
             },

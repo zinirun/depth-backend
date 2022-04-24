@@ -66,10 +66,17 @@ export class CompanyService {
     }
 
     async getOneOrThrowById(id: string): Promise<Company> {
-        const company = await this.companyModel.findById(id).lean().exec();
+        const company = await this.companyModel.findById(id).populate('users').lean().exec();
         if (!company) {
             throw new NotFoundException('Company not exists');
         }
         return company;
+    }
+
+    async getUsersById(id: string, exceptUserId?: string): Promise<User[]> {
+        const company = await this.getOneOrThrowById(id);
+        return exceptUserId
+            ? company.users.filter((user) => String(user._id) !== String(exceptUserId))
+            : company.users;
     }
 }

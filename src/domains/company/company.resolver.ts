@@ -1,4 +1,4 @@
-import { Resolver, Mutation, Args } from '@nestjs/graphql';
+import { Resolver, Mutation, Args, Query } from '@nestjs/graphql';
 import { SkipAuth } from 'src/auth/decorators/skip-auth.decorator';
 import { GetUser } from 'src/lib/decorators/get-user.decorator';
 import { Company } from 'src/schemas/company.schema';
@@ -18,6 +18,7 @@ export class CompanyResolver {
     async createOne(@Args('company') company: CreateCompanyInput): Promise<Company> {
         return await this.companyService.create(company);
     }
+
     @Mutation(() => Company, {
         name: 'inviteUserToCompany',
     })
@@ -29,5 +30,12 @@ export class CompanyResolver {
         input: CreateUserInput,
     ): Promise<Company> {
         return await this.companyService.addUser(requester, input);
+    }
+
+    @Query(() => [User], {
+        name: 'companyUsers',
+    })
+    async users(@GetUser() requester: User): Promise<User[]> {
+        return await this.companyService.getUsersById(requester.company._id, requester._id);
     }
 }

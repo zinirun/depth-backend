@@ -67,6 +67,16 @@ export class ProjectResolver {
         return await this.projectService.restore(id, user._id);
     }
 
+    @Query(() => [User], {
+        name: 'projectUsers',
+    })
+    async getAccesses(
+        @GetUser() user: User,
+        @Args('id', { type: () => ID }) id: string,
+    ): Promise<User[]> {
+        return await this.projectService.getAccessesById(id, user._id);
+    }
+
     @Mutation(() => Project, {
         name: 'inviteProject',
     })

@@ -11,7 +11,6 @@ import { SoftDeleteModel } from 'src/lib/plugins/soft-delete.plugin';
 import { Task, TaskDocument } from 'src/schemas/task.schema';
 import { CreateTaskInput } from './dto/create-task-input.dto';
 import { ProjectService } from '../project/project.service';
-import { TaskMeta } from './dto/task-meta.dto';
 import { UpdateTaskInput } from './dto/update-task-input.dto';
 import { ClientSession } from 'mongoose';
 import { MoveTaskChildrenInput } from './dto/move-task-children-input.dto';
@@ -37,7 +36,10 @@ export class TaskService {
             involvedUserIds: involvedUsers,
             ...taskInput
         } = input;
-        await this.projectService.getOneAndCheckAccessOrThrowById(projectId, user._id);
+        const project = await this.projectService.getOneAndCheckAccessOrThrowById(
+            projectId,
+            user._id,
+        );
 
         const newTask = new this.taskModel({
             ...taskInput,
@@ -47,26 +49,33 @@ export class TaskService {
             involvedUsers,
         });
 
-        if (parentTaskId) {
-            const session = await this.connection.startSession();
-            session.startTransaction();
-            try {
+        const session = await this.connection.startSession();
+        session.startTransaction();
+
+        try {
+            if (parentTaskId) {
+                // task level; sub task (not top depth)
                 const { _id } = await newTask.save({ session });
                 await this.addChildren(parentTaskId, _id, sortAfterTaskId, session);
-                await session.commitTransaction();
 
+                await session.commitTransaction();
                 await this.projectService.updateTaskUpdatedAt(projectId);
                 return await this.getOneOrThrowById(_id);
-            } catch (err) {
-                console.error(err);
-                session.abortTransaction();
-                throw new InternalServerErrorException('Transaction aborted');
-            } finally {
-                session.endSession();
+            } else {
+                // project level; task (top depth)
+                const { _id } = await newTask.save({ session });
+                await this.projectService.addTopChildren(project, _id, sortAfterTaskId, session);
+
+                await session.commitTransaction();
+                await this.projectService.updateTaskUpdatedAt(projectId);
+                return await this.getOneOrThrowById(_id);
             }
-        } else {
-            const { _id } = await newTask.save();
-            return await this.getOneOrThrowById(_id);
+        } catch (err) {
+            console.error(err);
+            session.abortTransaction();
+            throw new InternalServerErrorException('Transaction aborted');
+        } finally {
+            session.endSession();
         }
     }
 
@@ -107,17 +116,25 @@ export class TaskService {
         return task;
     }
 
-    async getAllMetaByProjectIdAndUserId(projectId: string, userId: string): Promise<TaskMeta[]> {
-        await this.projectService.getOneAndCheckAccessOrThrowById(projectId, userId);
+    async getAllByProjectIdAndUserId(projectId: string, userId: string): Promise<Task[]> {
+        const project = await this.projectService.getOneAndCheckAccessOrThrowById(
+            projectId,
+            userId,
+        );
         const tasks = await this.taskModel
             .find({
-                project: projectId,
-                isTopDepth: true,
+                _id: {
+                    $in: project.topChildrens,
+                },
+                // migrated task -> project based nested childrens
+                // project: projectId,
+                // isTopDepth: true,
             })
             .populate('author')
             .populate('project')
             .populate('childrens')
             .populate('involvedUsers')
+            .populate('comments')
             .lean()
             .exec();
         return tasks;
@@ -201,7 +218,7 @@ export class TaskService {
                     },
                     {
                         $set: {
-                            comments: { ...task.comments, newCommentId },
+                            comments: [...(task.comments || []), newCommentId],
                         },
                     },
                 )
@@ -271,19 +288,19 @@ export class TaskService {
         sortAfterId?: string,
         session?: ClientSession,
     ): Promise<Task> {
-        const parent = await this.getOneOrThrowById(parentId);
+        const { childrens = [] } = await this.getOneOrThrowById(parentId);
 
-        let childrens = [...parent.childrens, childrenId];
+        let newChildrens = [...childrens, childrenId];
 
         if (sortAfterId) {
-            const sortAfterIndex = parent.childrens.findIndex(
+            const sortAfterIndex = childrens.findIndex(
                 (children) => String(children._id) === sortAfterId,
             );
             if (sortAfterIndex !== -1) {
-                childrens = [
-                    ...parent.childrens.slice(0, sortAfterIndex + 1),
+                newChildrens = [
+                    ...childrens.slice(0, sortAfterIndex + 1),
                     childrenId,
-                    ...parent.childrens.slice(sortAfterIndex + 1),
+                    ...childrens.slice(sortAfterIndex + 1),
                 ];
             } else {
                 throw new BadRequestException('Sorting task not exists');
@@ -297,7 +314,7 @@ export class TaskService {
                 },
                 {
                     $set: {
-                        childrens,
+                        childrens: newChildrens,
                     },
                 },
             )
@@ -306,13 +323,51 @@ export class TaskService {
         return await this.getOneOrThrowById(parentId);
     }
 
-    async removeChildren(parentId: string, childrenId: string): Promise<Task> {
-        const parent = await this.getOneOrThrowById(parentId);
+    async addChildrenByPlainTask(
+        parentTask: Task,
+        childrenId: string,
+        sortAfterId?: string,
+        session?: ClientSession,
+    ): Promise<Task> {
+        const { childrens, _id } = parentTask;
+        let newChildrens = [...childrens, childrenId];
+
+        if (sortAfterId) {
+            const sortAfterIndex = childrens.findIndex(
+                (children) => String(children._id) === sortAfterId,
+            );
+            if (sortAfterIndex !== -1) {
+                newChildrens = [
+                    ...childrens.slice(0, sortAfterIndex + 1),
+                    childrenId,
+                    ...childrens.slice(sortAfterIndex + 1),
+                ];
+            } else {
+                throw new BadRequestException('Sorting task not exists');
+            }
+        }
 
         await this.taskModel
             .updateOne(
                 {
-                    _id: parentId,
+                    _id,
+                },
+                {
+                    $set: {
+                        childrens: newChildrens,
+                    },
+                },
+            )
+            .session(session || undefined)
+            .exec();
+        return await this.getOneOrThrowById(_id);
+    }
+
+    async removeChildren(parent: Task, childrenId: string, session?: ClientSession): Promise<Task> {
+        await this.taskModel
+            .updateOne(
+                {
+                    _id: parent._id,
                 },
                 {
                     $set: {
@@ -322,115 +377,171 @@ export class TaskService {
                     },
                 },
             )
+            .session(session || undefined)
             .exec();
-        return await this.getOneOrThrowById(parentId);
+        return await this.getOneOrThrowById(parent._id);
     }
 
+    async sortChildren(
+        parent: Task,
+        childrenId: string,
+        sortAfterId: string,
+        session?: ClientSession,
+    ) {
+        const { childrens, _id } = parent;
+        if (sortAfterId) {
+            const sortAfterIndex = childrens.findIndex(
+                (children) => String(children._id) === sortAfterId,
+            );
+            if (sortAfterIndex !== -1) {
+                const newChildrens = [
+                    ...childrens.slice(0, sortAfterIndex + 1),
+                    childrenId,
+                    ...childrens.slice(sortAfterIndex + 1),
+                ];
+                await this.taskModel
+                    .updateOne(
+                        {
+                            _id,
+                        },
+                        {
+                            $set: {
+                                childrens: newChildrens,
+                            },
+                        },
+                    )
+                    .session(session || undefined)
+                    .exec();
+            } else {
+                throw new BadRequestException('Sorting task not exists');
+            }
+        }
+    }
+
+    // TODO: Need to refactor (to modules)
     async moveChildren(
         user: User,
         { fromParentId, toParentId, childrenId, sortAfterId }: MoveTaskChildrenInput,
     ): Promise<[Task, Task?]> {
         const fromParent = await this.getOneOrThrowById(fromParentId);
-        await this.projectService.getOneAndCheckAccessOrThrowById(fromParent.project._id, user._id);
+        const project = await this.projectService.getOneAndCheckAccessOrThrowById(
+            fromParent.project._id,
+            user._id,
+        );
 
-        if (fromParentId === toParentId) {
-            // move in same parent - just update sorting
-            if (sortAfterId) {
-                const sortAfterIndex = fromParent.childrens.findIndex(
-                    (children) => String(children._id) === sortAfterId,
+        if (fromParentId && toParentId) {
+            // move in not-top-depth tasks
+            if (fromParentId === toParentId) {
+                // move in same parent - just update sorting
+                await this.sortChildren(fromParent, childrenId, sortAfterId);
+                return [await this.getOneOrThrowById(fromParentId)];
+            } else {
+                // move to another parent
+                const toParent = await this.getOneOrThrowById(toParentId);
+
+                await this.projectService.getOneAndCheckAccessOrThrowById(
+                    toParent.project._id,
+                    user._id,
                 );
-                if (sortAfterIndex !== -1) {
-                    const childrens = [
-                        ...fromParent.childrens.slice(0, sortAfterIndex + 1),
-                        childrenId,
-                        ...fromParent.childrens.slice(sortAfterIndex + 1),
-                    ];
+
+                let toChildrens = [...toParent.childrens, childrenId];
+
+                if (sortAfterId) {
+                    const sortAfterIndex = toParent.childrens.findIndex(
+                        (children) => String(children._id) === sortAfterId,
+                    );
+                    if (sortAfterIndex !== -1) {
+                        toChildrens = [
+                            ...toParent.childrens.slice(0, sortAfterIndex + 1),
+                            childrenId,
+                            ...toParent.childrens.slice(sortAfterIndex + 1),
+                        ];
+                    } else {
+                        throw new BadRequestException('Sorting task not exists');
+                    }
+                }
+
+                const session = await this.connection.startSession();
+                session.startTransaction();
+                try {
+                    await this.removeChildren(fromParent, childrenId, session);
                     await this.taskModel
                         .updateOne(
                             {
-                                _id: fromParentId,
+                                _id: toParentId,
                             },
                             {
                                 $set: {
-                                    childrens,
+                                    childrens: toChildrens,
                                 },
                             },
                         )
+                        .session(session)
                         .exec();
-                } else {
-                    throw new BadRequestException('Sorting task not exists');
-                }
-            }
-            return [await this.getOneOrThrowById(fromParentId)];
-        } else {
-            // move to another parent
-            const toParent = await this.getOneOrThrowById(toParentId);
-
-            await this.projectService.getOneAndCheckAccessOrThrowById(
-                toParent.project._id,
-                user._id,
-            );
-
-            const fromChildrens = fromParent.childrens.filter(
-                (children) => String(children._id) !== String(childrenId),
-            );
-            let toChildrens = [...toParent.childrens, childrenId];
-
-            if (sortAfterId) {
-                const sortAfterIndex = toParent.childrens.findIndex(
-                    (children) => String(children._id) === sortAfterId,
-                );
-                if (sortAfterIndex !== -1) {
-                    toChildrens = [
-                        ...toParent.childrens.slice(0, sortAfterIndex + 1),
-                        childrenId,
-                        ...toParent.childrens.slice(sortAfterIndex + 1),
+                    await session.commitTransaction();
+                    return [
+                        await this.getOneOrThrowById(fromParentId),
+                        await this.getOneOrThrowById(toParentId),
                     ];
-                } else {
-                    throw new BadRequestException('Sorting task not exists');
+                } catch (err) {
+                    console.error(err);
+                    session.abortTransaction();
+                    throw new InternalServerErrorException('Transaction aborted');
+                } finally {
+                    session.endSession();
                 }
             }
-
-            const session = await this.connection.startSession();
-            session.startTransaction();
-            try {
-                await this.taskModel
-                    .updateOne(
-                        {
-                            _id: fromParentId,
-                        },
-                        {
-                            $set: {
-                                childrens: fromChildrens,
-                            },
-                        },
-                    )
-                    .session(session)
-                    .exec();
-                await this.taskModel
-                    .updateOne(
-                        {
-                            _id: toParentId,
-                        },
-                        {
-                            $set: {
-                                childrens: toChildrens,
-                            },
-                        },
-                    )
-                    .session(session)
-                    .exec();
-                await session.commitTransaction();
-                return [
-                    await this.getOneOrThrowById(fromParentId),
-                    await this.getOneOrThrowById(toParentId),
-                ];
-            } catch (err) {
-                console.error(err);
-                session.abortTransaction();
-                throw new InternalServerErrorException('Transaction aborted');
-            } finally {
-                session.endSession();
+        } else {
+            // move in include-top-depth tasks
+            if (!fromParentId && toParentId) {
+                // from: top-depth, to: not-top-depth
+                const session = await this.connection.startSession();
+                session.startTransaction();
+                try {
+                    const toParent = await this.getOneOrThrowById(toParentId);
+                    await this.projectService.removeTopChildren(project, childrenId, session);
+                    const updated = await this.addChildrenByPlainTask(
+                        toParent,
+                        childrenId,
+                        sortAfterId,
+                        session,
+                    );
+                    await session.commitTransaction();
+                    return [updated];
+                } catch (err) {
+                    console.error(err);
+                    session.abortTransaction();
+                    throw new InternalServerErrorException('Transaction aborted');
+                } finally {
+                    session.endSession();
+                }
+            } else if (fromParentId && !toParentId) {
+                // from: not-top-depth, to: top-depth
+                const session = await this.connection.startSession();
+                session.startTransaction();
+                try {
+                    await this.removeChildren(fromParent, childrenId, session);
+                    await this.projectService.addTopChildren(
+                        project,
+                        childrenId,
+                        sortAfterId,
+                        session,
+                    );
+                    await session.commitTransaction();
+                    return [
+                        await this.getOneOrThrowById(fromParentId),
+                        await this.getOneOrThrowById(toParentId),
+                    ];
+                } catch (err) {
+                    console.error(err);
+                    session.abortTransaction();
+                    throw new InternalServerErrorException('Transaction aborted');
+                } finally {
+                    session.endSession();
+                }
+            } else {
+                // from: top-depth, to: top-depth
+                await this.projectService.sortTopChildren(project, childrenId, sortAfterId);
             }
         }
     }

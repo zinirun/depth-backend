@@ -5,6 +5,7 @@ import { softDeletePlugin } from 'src/lib/plugins/soft-delete.plugin';
 import { DateScalar } from 'src/lib/scalars/date.scalar';
 import { Schemas } from './@define';
 import { Company } from './company.schema';
+import { Task } from './task.schema';
 import { User } from './user.schema';
 
 @Schema({
@@ -35,10 +36,6 @@ export class Project {
             {
                 type: mongoose.Schema.Types.ObjectId,
                 ref: Schemas.User.name,
-                index: {
-                    unique: true,
-                    dropDups: true,
-                },
             },
         ],
     })
@@ -48,6 +45,11 @@ export class Project {
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: Schemas.User.name })
     @Field(() => User)
     manager: User;
+
+    @Prop({
+        type: [{ type: mongoose.Schema.Types.ObjectId, ref: Schemas.Task.name }],
+    })
+    topChildrens: Task[];
 
     @Field(() => DateScalar)
     createdAt: Date;

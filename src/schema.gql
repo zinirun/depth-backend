@@ -57,8 +57,11 @@ type Project {
 }
 
 type TaskComment {
+  _id: ID!
   author: User!
   content: String!
+  createdAt: Date!
+  updatedAt: Date!
 }
 
 type DateRange {
@@ -69,7 +72,7 @@ type DateRange {
 type Task {
   _id: ID!
   author: User!
-  title: String!
+  title: String
   content: String
   project: Project!
   isTopDepth: Boolean!
@@ -88,27 +91,16 @@ enum TaskStatus {
   Done
 }
 
-type TaskMeta {
-  _id: ID!
-  author: User!
-  title: String!
-  content: String
-  isTopDepth: Boolean!
-  childrens: [TaskMeta!]!
-  involvedUsers: [User!]!
-  comments: [ID!]!
-  deadline: DateRange
-  createdAt: Date!
-}
-
 type Query {
   project(id: ID!): Project!
   projects: [Project!]!
+  projectUsers(id: ID!): [User!]!
+  companyUsers: [User!]!
   login(input: LoginInput!): User!
   me: User!
   logout: Boolean!
   task(id: ID!): Task!
-  tasksByProjectId(projectId: ID!): [TaskMeta!]!
+  tasksByProjectId(projectId: ID!): [Task!]!
 }
 
 input LoginInput {
@@ -131,6 +123,9 @@ type Mutation {
   updateTask(task: UpdateTaskInput!): Task!
   deleteTask(id: ID!): ID!
   restoreTask(id: ID!): ID!
+  createTaskComment(comment: CreateTaskCommentInput!): TaskComment!
+  updateTaskComment(comment: UpdateTaskCommentInput!): TaskComment!
+  deleteTaskComment(id: ID!): ID!
   moveTaskChildren(input: MoveTaskChildrenInput!): [Task!]!
 }
 
@@ -183,9 +178,19 @@ input UpdateTaskInput {
   status: TaskStatus
 }
 
+input CreateTaskCommentInput {
+  taskId: ID!
+  content: String!
+}
+
+input UpdateTaskCommentInput {
+  id: ID!
+  content: String!
+}
+
 input MoveTaskChildrenInput {
-  fromParentId: String!
-  toParentId: String!
+  fromParentId: String
+  toParentId: String
   childrenId: String!
   sortAfterId: String
 }

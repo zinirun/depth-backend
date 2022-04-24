@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { Project, ProjectDocument } from 'src/schemas/project.schema';
@@ -6,6 +6,7 @@ import { CreateProjectInput } from './dto/create-project-input.dto';
 import { User } from 'src/schemas/user.schema';
 import { SoftDeleteModel } from 'src/lib/plugins/soft-delete.plugin';
 import { UpdateProjectInput } from './dto/update-project-input.dto';
+import { ClientSession } from 'mongoose';
 
 @Injectable()
 export class ProjectService {
@@ -16,7 +17,7 @@ export class ProjectService {
 
     async create(input: CreateProjectInput, user: User): Promise<Project> {
         if (!input.accesses.includes(String(user._id))) {
-            input.accesses.push(user._id);
+            input.accesses.unshift(user._id);
         }
         const newProject = new this.projectModel(input);
 
@@ -68,6 +69,11 @@ export class ProjectService {
         this.throwIfCannotAccess(project, userId);
 
         return project;
+    }
+
+    async getAccessesById(id: string, userId: string): Promise<User[]> {
+        const project = await this.getOneAndCheckAccessOrThrowById(id, userId);
+        return project.accesses;
     }
 
     async update(input: UpdateProjectInput, requesterId: string): Promise<Project> {
@@ -170,6 +176,106 @@ export class ProjectService {
                 )
                 .exec()) && true
         );
+    }
+
+    async addTopChildren(
+        project: Project,
+        childrenTaskId: string,
+        sortAfterTaskId: string,
+        session?: ClientSession,
+    ): Promise<Project> {
+        const { topChildrens = [], _id } = project;
+        let newTopChildrens = [...topChildrens, childrenTaskId];
+
+        if (sortAfterTaskId) {
+            const sortAfterIndex = topChildrens.findIndex(
+                (children) => String(children._id) === sortAfterTaskId,
+            );
+            if (sortAfterIndex !== -1) {
+                newTopChildrens = [
+                    ...topChildrens.slice(0, sortAfterIndex + 1),
+                    childrenTaskId,
+                    ...topChildrens.slice(sortAfterIndex),
+                ];
+            } else {
+                throw new BadRequestException('Sorting task not exists');
+            }
+        }
+
+        await this.projectModel
+            .updateOne(
+                {
+                    _id,
+                },
+                {
+                    $set: {
+                        topChildrens: newTopChildrens,
+                    },
+                },
+            )
+            .session(session || undefined)
+            .exec();
+        return await this.getOneOrThrowById(project._id);
+    }
+
+    async removeTopChildren(
+        project: Project,
+        childrenTaskId: string,
+        session?: ClientSession,
+    ): Promise<Project> {
+        const { _id, topChildrens = [] } = project;
+        await this.projectModel
+            .updateOne(
+                {
+                    _id,
+                },
+                {
+                    $set: {
+                        topChildrens: topChildrens.filter(
+                            (children) => String(children._id) !== String(childrenTaskId),
+                        ),
+                    },
+                },
+            )
+            .session(session || undefined)
+            .exec();
+        return await this.getOneOrThrowById(_id);
+    }
+
+    async sortTopChildren(
+        project: Project,
+        childrenTaskId: string,
+        sortAfterTaskId: string,
+        session?: ClientSession,
+    ) {
+        const { _id, topChildrens = [] } = project;
+        if (sortAfterTaskId) {
+            const sortAfterIndex = topChildrens.findIndex(
+                (children) => String(children._id) === sortAfterTaskId,
+            );
+            if (sortAfterIndex !== -1) {
+                const childrens = [
+                    topChildrens.slice(0, sortAfterIndex + 1),
+                    childrenTaskId,
+                    topChildrens.slice(sortAfterIndex + 1),
+                ];
+                await this.projectModel
+                    .updateOne(
+                        {
+                            _id,
+                        },
+                        {
+                            $set: {
+                                childrens,
+                            },
+                        },
+                    )
+                    .session(session || undefined)
+                    .exec();
+            } else {
+                throw new BadRequestException('Sorting task not exists');
+            }
+        }
     }
 
     throwIfCannotAccess(project: Project, userId: string): void {
