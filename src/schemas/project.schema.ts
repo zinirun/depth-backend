@@ -49,7 +49,7 @@ export class Project {
     @Prop({
         type: [{ type: mongoose.Schema.Types.ObjectId, ref: Schemas.Task.name }],
     })
-    topChildrens: Task[];
+    topChildren: Task[];
 
     @Field(() => DateScalar)
     createdAt: Date;

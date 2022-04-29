@@ -32,7 +32,7 @@ export class TaskMeta {
     isTopDepth: boolean;
 
     @Field(() => [TaskMeta])
-    childrens: TaskMeta[];
+    children: TaskMeta[];
 
     @Field(() => [User])
     involvedUsers: User[];

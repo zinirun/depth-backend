@@ -178,24 +178,24 @@ export class ProjectService {
         );
     }
 
-    async addTopChildren(
+    async addTopChild(
         project: Project,
-        childrenTaskId: string,
+        childTaskId: string,
         sortAfterTaskId: string,
         session?: ClientSession,
     ): Promise<Project> {
-        const { topChildrens = [], _id } = project;
-        let newTopChildrens = [...topChildrens, childrenTaskId];
+        const { topChildren = [], _id } = project;
+        let newTopChildren = [...topChildren, childTaskId];
 
         if (sortAfterTaskId) {
-            const sortAfterIndex = topChildrens.findIndex(
+            const sortAfterIndex = topChildren.findIndex(
                 (children) => String(children._id) === sortAfterTaskId,
             );
             if (sortAfterIndex !== -1) {
-                newTopChildrens = [
-                    ...topChildrens.slice(0, sortAfterIndex + 1),
-                    childrenTaskId,
-                    ...topChildrens.slice(sortAfterIndex),
+                newTopChildren = [
+                    ...topChildren.slice(0, sortAfterIndex + 1),
+                    childTaskId,
+                    ...topChildren.slice(sortAfterIndex),
                 ];
             } else {
                 throw new BadRequestException('Sorting task not exists');
@@ -209,7 +209,7 @@ export class ProjectService {
                 },
                 {
                     $set: {
-                        topChildrens: newTopChildrens,
+                        topChildren: newTopChildren,
                     },
                 },
             )
@@ -218,12 +218,12 @@ export class ProjectService {
         return await this.getOneOrThrowById(project._id);
     }
 
-    async removeTopChildren(
+    async removeTopChild(
         project: Project,
-        childrenTaskId: string,
+        childTaskId: string,
         session?: ClientSession,
     ): Promise<Project> {
-        const { _id, topChildrens = [] } = project;
+        const { _id, topChildren = [] } = project;
         await this.projectModel
             .updateOne(
                 {
@@ -231,8 +231,8 @@ export class ProjectService {
                 },
                 {
                     $set: {
-                        topChildrens: topChildrens.filter(
-                            (children) => String(children._id) !== String(childrenTaskId),
+                        topChildren: topChildren.filter(
+                            (children) => String(children._id) !== String(childTaskId),
                         ),
                     },
                 },
@@ -242,22 +242,22 @@ export class ProjectService {
         return await this.getOneOrThrowById(_id);
     }
 
-    async sortTopChildren(
+    async sortTopChild(
         project: Project,
-        childrenTaskId: string,
+        childTaskId: string,
         sortAfterTaskId: string,
         session?: ClientSession,
     ) {
-        const { _id, topChildrens = [] } = project;
+        const { _id, topChildren = [] } = project;
         if (sortAfterTaskId) {
-            const sortAfterIndex = topChildrens.findIndex(
+            const sortAfterIndex = topChildren.findIndex(
                 (children) => String(children._id) === sortAfterTaskId,
             );
             if (sortAfterIndex !== -1) {
-                const childrens = [
-                    topChildrens.slice(0, sortAfterIndex + 1),
-                    childrenTaskId,
-                    topChildrens.slice(sortAfterIndex + 1),
+                const children = [
+                    topChildren.slice(0, sortAfterIndex + 1),
+                    childTaskId,
+                    topChildren.slice(sortAfterIndex + 1),
                 ];
                 await this.projectModel
                     .updateOne(
@@ -266,7 +266,7 @@ export class ProjectService {
                         },
                         {
                             $set: {
-                                childrens,
+                                children,
                             },
                         },
                     )

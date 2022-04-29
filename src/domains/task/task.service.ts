@@ -56,7 +56,7 @@ export class TaskService {
             if (parentTaskId) {
                 // task level; sub task (not top depth)
                 const { _id } = await newTask.save({ session });
-                await this.addChildren(parentTaskId, _id, sortAfterTaskId, session);
+                await this.addChild(parentTaskId, _id, sortAfterTaskId, session);
 
                 await session.commitTransaction();
                 await this.projectService.updateTaskUpdatedAt(projectId);
@@ -64,7 +64,7 @@ export class TaskService {
             } else {
                 // project level; task (top depth)
                 const { _id } = await newTask.save({ session });
-                await this.projectService.addTopChildren(project, _id, sortAfterTaskId, session);
+                await this.projectService.addTopChild(project, _id, sortAfterTaskId, session);
 
                 await session.commitTransaction();
                 await this.projectService.updateTaskUpdatedAt(projectId);
@@ -84,7 +84,7 @@ export class TaskService {
             .findById(id)
             .populate('author')
             .populate('project')
-            .populate('childrens')
+            .populate('children')
             .populate('involvedUsers')
             .populate('comments')
             .populate('comments.author')
@@ -101,7 +101,7 @@ export class TaskService {
             .findById(id)
             .populate('author')
             .populate('project')
-            .populate('childrens')
+            .populate('children')
             .populate('involvedUsers')
             .populate('comments')
             .populate('comments.author')
@@ -124,15 +124,15 @@ export class TaskService {
         const tasks = await this.taskModel
             .find({
                 _id: {
-                    $in: project.topChildrens,
+                    $in: project.topChildren,
                 },
-                // migrated task -> project based nested childrens
+                // migrated task -> project based nested children
                 // project: projectId,
                 // isTopDepth: true,
             })
             .populate('author')
             .populate('project')
-            .populate('childrens')
+            .populate('children')
             .populate('involvedUsers')
             .populate('comments')
             .lean()
@@ -282,25 +282,25 @@ export class TaskService {
         return id;
     }
 
-    async addChildren(
+    async addChild(
         parentId: string,
-        childrenId: string,
+        childId: string,
         sortAfterId?: string,
         session?: ClientSession,
     ): Promise<Task> {
-        const { childrens = [] } = await this.getOneOrThrowById(parentId);
+        const { children = [] } = await this.getOneOrThrowById(parentId);
 
-        let newChildrens = [...childrens, childrenId];
+        let newChildren = [...children, childId];
 
         if (sortAfterId) {
-            const sortAfterIndex = childrens.findIndex(
+            const sortAfterIndex = children.findIndex(
                 (children) => String(children._id) === sortAfterId,
             );
             if (sortAfterIndex !== -1) {
-                newChildrens = [
-                    ...childrens.slice(0, sortAfterIndex + 1),
-                    childrenId,
-                    ...childrens.slice(sortAfterIndex + 1),
+                newChildren = [
+                    ...children.slice(0, sortAfterIndex + 1),
+                    childId,
+                    ...children.slice(sortAfterIndex + 1),
                 ];
             } else {
                 throw new BadRequestException('Sorting task not exists');
@@ -314,7 +314,7 @@ export class TaskService {
                 },
                 {
                     $set: {
-                        childrens: newChildrens,
+                        children: newChildren,
                     },
                 },
             )
@@ -323,24 +323,24 @@ export class TaskService {
         return await this.getOneOrThrowById(parentId);
     }
 
-    async addChildrenByPlainTask(
+    async addChildByPlainTask(
         parentTask: Task,
-        childrenId: string,
+        childId: string,
         sortAfterId?: string,
         session?: ClientSession,
     ): Promise<Task> {
-        const { childrens, _id } = parentTask;
-        let newChildrens = [...childrens, childrenId];
+        const { children, _id } = parentTask;
+        let newChildren = [...children, childId];
 
         if (sortAfterId) {
-            const sortAfterIndex = childrens.findIndex(
+            const sortAfterIndex = children.findIndex(
                 (children) => String(children._id) === sortAfterId,
             );
             if (sortAfterIndex !== -1) {
-                newChildrens = [
-                    ...childrens.slice(0, sortAfterIndex + 1),
-                    childrenId,
-                    ...childrens.slice(sortAfterIndex + 1),
+                newChildren = [
+                    ...children.slice(0, sortAfterIndex + 1),
+                    childId,
+                    ...children.slice(sortAfterIndex + 1),
                 ];
             } else {
                 throw new BadRequestException('Sorting task not exists');
@@ -354,7 +354,7 @@ export class TaskService {
                 },
                 {
                     $set: {
-                        childrens: newChildrens,
+                        children: newChildren,
                     },
                 },
             )
@@ -363,7 +363,7 @@ export class TaskService {
         return await this.getOneOrThrowById(_id);
     }
 
-    async removeChildren(parent: Task, childrenId: string, session?: ClientSession): Promise<Task> {
+    async removeChild(parent: Task, childId: string, session?: ClientSession): Promise<Task> {
         await this.taskModel
             .updateOne(
                 {
@@ -371,8 +371,8 @@ export class TaskService {
                 },
                 {
                     $set: {
-                        childrens: parent.childrens.filter(
-                            (children) => String(children._id) !== String(childrenId),
+                        children: parent.children.filter(
+                            (children) => String(children._id) !== String(childId),
                         ),
                     },
                 },
@@ -382,22 +382,17 @@ export class TaskService {
         return await this.getOneOrThrowById(parent._id);
     }
 
-    async sortChildren(
-        parent: Task,
-        childrenId: string,
-        sortAfterId: string,
-        session?: ClientSession,
-    ) {
-        const { childrens, _id } = parent;
+    async sortChild(parent: Task, childId: string, sortAfterId: string, session?: ClientSession) {
+        const { children, _id } = parent;
         if (sortAfterId) {
-            const sortAfterIndex = childrens.findIndex(
+            const sortAfterIndex = children.findIndex(
                 (children) => String(children._id) === sortAfterId,
             );
             if (sortAfterIndex !== -1) {
-                const newChildrens = [
-                    ...childrens.slice(0, sortAfterIndex + 1),
-                    childrenId,
-                    ...childrens.slice(sortAfterIndex + 1),
+                const newChildren = [
+                    ...children.slice(0, sortAfterIndex + 1),
+                    childId,
+                    ...children.slice(sortAfterIndex + 1),
                 ];
                 await this.taskModel
                     .updateOne(
@@ -406,7 +401,7 @@ export class TaskService {
                         },
                         {
                             $set: {
-                                childrens: newChildrens,
+                                children: newChildren,
                             },
                         },
                     )
@@ -419,9 +414,9 @@ export class TaskService {
     }
 
     // TODO: Need to refactor (to modules)
-    async moveChildren(
+    async moveChild(
         user: User,
-        { fromParentId, toParentId, childrenId, sortAfterId }: MoveTaskChildrenInput,
+        { fromParentId, toParentId, childId, sortAfterId }: MoveTaskChildrenInput,
     ): Promise<[Task, Task?]> {
         const fromParent = await this.getOneOrThrowById(fromParentId);
         const project = await this.projectService.getOneAndCheckAccessOrThrowById(
@@ -433,7 +428,7 @@ export class TaskService {
             // move in not-top-depth tasks
             if (fromParentId === toParentId) {
                 // move in same parent - just update sorting
-                await this.sortChildren(fromParent, childrenId, sortAfterId);
+                await this.sortChild(fromParent, childId, sortAfterId);
                 return [await this.getOneOrThrowById(fromParentId)];
             } else {
                 // move to another parent
@@ -444,17 +439,17 @@ export class TaskService {
                     user._id,
                 );
 
-                let toChildrens = [...toParent.childrens, childrenId];
+                let toChildren = [...toParent.children, childId];
 
                 if (sortAfterId) {
-                    const sortAfterIndex = toParent.childrens.findIndex(
+                    const sortAfterIndex = toParent.children.findIndex(
                         (children) => String(children._id) === sortAfterId,
                     );
                     if (sortAfterIndex !== -1) {
-                        toChildrens = [
-                            ...toParent.childrens.slice(0, sortAfterIndex + 1),
-                            childrenId,
-                            ...toParent.childrens.slice(sortAfterIndex + 1),
+                        toChildren = [
+                            ...toParent.children.slice(0, sortAfterIndex + 1),
+                            childId,
+                            ...toParent.children.slice(sortAfterIndex + 1),
                         ];
                     } else {
                         throw new BadRequestException('Sorting task not exists');
@@ -464,7 +459,7 @@ export class TaskService {
                 const session = await this.connection.startSession();
                 session.startTransaction();
                 try {
-                    await this.removeChildren(fromParent, childrenId, session);
+                    await this.removeChild(fromParent, childId, session);
                     await this.taskModel
                         .updateOne(
                             {
@@ -472,7 +467,7 @@ export class TaskService {
                             },
                             {
                                 $set: {
-                                    childrens: toChildrens,
+                                    children: toChildren,
                                 },
                             },
                         )
@@ -499,10 +494,10 @@ export class TaskService {
                 session.startTransaction();
                 try {
                     const toParent = await this.getOneOrThrowById(toParentId);
-                    await this.projectService.removeTopChildren(project, childrenId, session);
-                    const updated = await this.addChildrenByPlainTask(
+                    await this.projectService.removeTopChild(project, childId, session);
+                    const updated = await this.addChildByPlainTask(
                         toParent,
-                        childrenId,
+                        childId,
                         sortAfterId,
                         session,
                     );
@@ -520,13 +515,8 @@ export class TaskService {
                 const session = await this.connection.startSession();
                 session.startTransaction();
                 try {
-                    await this.removeChildren(fromParent, childrenId, session);
-                    await this.projectService.addTopChildren(
-                        project,
-                        childrenId,
-                        sortAfterId,
-                        session,
-                    );
+                    await this.removeChild(fromParent, childId, session);
+                    await this.projectService.addTopChild(project, childId, sortAfterId, session);
                     await session.commitTransaction();
                     return [
                         await this.getOneOrThrowById(fromParentId),
@@ -541,7 +531,7 @@ export class TaskService {
                 }
             } else {
                 // from: top-depth, to: top-depth
-                await this.projectService.sortTopChildren(project, childrenId, sortAfterId);
+                await this.projectService.sortTopChild(project, childId, sortAfterId);
             }
         }
     }

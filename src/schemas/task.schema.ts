@@ -56,7 +56,7 @@ export class Task {
         type: [{ type: mongoose.Schema.Types.ObjectId, ref: Schemas.Task.name }],
     })
     @Field(() => [Task])
-    childrens: Task[];
+    children: Task[];
 
     @Prop({
         type: [{ type: mongoose.Schema.Types.ObjectId, ref: Schemas.User.name }],
@@ -97,7 +97,7 @@ export const TaskSchema = SchemaFactory.createForClass(Task)
     .plugin((schema) =>
         deepNestedPlugin(schema, [
             {
-                path: 'childrens',
+                path: 'children',
                 populate: [
                     {
                         path: 'author',

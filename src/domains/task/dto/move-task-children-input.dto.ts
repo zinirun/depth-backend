@@ -15,7 +15,7 @@ export class MoveTaskChildrenInput {
     readonly toParentId: string;
 
     @Field(() => String)
-    readonly childrenId: string;
+    readonly childId: string;
 
     @Field(() => String, {
         nullable: true,

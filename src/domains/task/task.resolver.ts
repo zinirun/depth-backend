@@ -102,12 +102,12 @@ export class TaskResolver {
     }
 
     @Mutation(() => [Task], {
-        name: 'moveTaskChildren',
+        name: 'moveTaskChild',
     })
-    async moveChildren(
+    async moveChild(
         @GetUser() user: User,
         @Args('input', { type: () => MoveTaskChildrenInput }) input: MoveTaskChildrenInput,
     ): Promise<[Task, Task?]> {
-        return await this.taskService.moveChildren(user, input);
+        return await this.taskService.moveChild(user, input);
     }
 }
