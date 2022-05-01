@@ -1,4 +1,4 @@
-import { Field, ID, InputType } from '@nestjs/graphql';
+import { Field, ID, InputType, Int } from '@nestjs/graphql';
 import { DateRangeInput } from 'src/lib/types/date-range.type';
 
 @InputType()
@@ -12,10 +12,10 @@ export class CreateTaskInput {
     })
     readonly parentTaskId?: string;
 
-    @Field(() => ID, {
+    @Field(() => Int, {
         nullable: true,
     })
-    readonly sortAfterTaskId?: string;
+    readonly sortIndex?: number;
 
     @Field(() => String)
     readonly title: string;

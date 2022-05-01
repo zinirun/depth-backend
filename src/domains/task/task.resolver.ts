@@ -5,7 +5,7 @@ import { Task } from 'src/schemas/task.schema';
 import { User } from 'src/schemas/user.schema';
 import { CreateTaskCommentInput } from './dto/create-task-comment-input.dto';
 import { CreateTaskInput } from './dto/create-task-input.dto';
-import { MoveTaskChildrenInput } from './dto/move-task-children-input.dto';
+import { MoveTaskChildInput } from './dto/move-task-child-input.dto';
 import { UpdateTaskCommentInput } from './dto/update-task-comment-input.dto';
 import { UpdateTaskInput } from './dto/update-task-input.dto';
 import { TaskService } from './task.service';
@@ -106,7 +106,7 @@ export class TaskResolver {
     })
     async moveChild(
         @GetUser() user: User,
-        @Args('input', { type: () => MoveTaskChildrenInput }) input: MoveTaskChildrenInput,
+        @Args('input', { type: () => MoveTaskChildInput }) input: MoveTaskChildInput,
     ): Promise<[Task, Task?]> {
         return await this.taskService.moveChild(user, input);
     }

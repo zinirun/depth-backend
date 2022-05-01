@@ -1,7 +1,7 @@
-import { Field, InputType } from '@nestjs/graphql';
+import { Field, InputType, Int } from '@nestjs/graphql';
 
 @InputType()
-export class MoveTaskChildrenInput {
+export class MoveTaskChildInput {
     // if null, fromParent is top depth task
     @Field(() => String, {
         nullable: true,
@@ -17,8 +17,8 @@ export class MoveTaskChildrenInput {
     @Field(() => String)
     readonly childId: string;
 
-    @Field(() => String, {
+    @Field(() => Int, {
         nullable: true,
     })
-    readonly sortAfterId?: string;
+    readonly sortIndex?: number;
 }

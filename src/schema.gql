@@ -126,7 +126,7 @@ type Mutation {
   createTaskComment(comment: CreateTaskCommentInput!): TaskComment!
   updateTaskComment(comment: UpdateTaskCommentInput!): TaskComment!
   deleteTaskComment(id: ID!): ID!
-  moveTaskChild(input: MoveTaskChildrenInput!): [Task!]!
+  moveTaskChild(input: MoveTaskChildInput!): [Task!]!
 }
 
 input CreateProjectInput {
@@ -157,7 +157,7 @@ input AssignPlainUserInput {
 input CreateTaskInput {
   projectId: ID!
   parentTaskId: ID
-  sortAfterTaskId: ID
+  sortIndex: Int
   title: String!
   content: String
   deadline: DateRangeInput
@@ -188,9 +188,9 @@ input UpdateTaskCommentInput {
   content: String!
 }
 
-input MoveTaskChildrenInput {
+input MoveTaskChildInput {
   fromParentId: String
   toParentId: String
   childId: String!
-  sortAfterId: String
+  sortIndex: Int
 }
