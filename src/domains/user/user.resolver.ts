@@ -28,12 +28,14 @@ export class UserResolver {
         return user;
     }
 
+    @SkipAuth()
     @Query(() => Boolean)
     logout(@ContextResponse() response: any): boolean {
         response.clearCookie('x-access');
         return true;
     }
 
+    @SkipAuth()
     @Mutation(() => User)
     async assignInviteWithPlain(
         @Args('id', {
@@ -45,13 +47,18 @@ export class UserResolver {
         return await this.userService.assignInviteWithPlain(id, input);
     }
 
+    @SkipAuth()
     @Mutation(() => User)
     async assignInviteWithOAuth(
         @Args('id', {
             type: () => ID,
         })
         id: string,
+        @Args('name', {
+            nullable: true,
+        })
+        name: string,
     ): Promise<User> {
-        return await this.userService.assignInviteWithOAuth(id);
+        return await this.userService.assignInviteWithOAuth(id, name);
     }
 }

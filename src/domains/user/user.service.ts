@@ -160,19 +160,25 @@ export class UserService {
         return await this.getOneOrThrowById(user._id);
     }
 
-    async assignInviteWithOAuth(userId: string): Promise<User> {
+    async assignInviteWithOAuth(userId: string, name?: string): Promise<User> {
         const user = await this.getOneOrThrowById(userId);
         if (user.inviteStatus === UserInviteStatus.Assigned) {
             throw new BadRequestException('Already assigned user');
+        }
+
+        let $set: Record<string, any> = {
+            inviteStatus: UserInviteStatus.Assigned,
+        };
+
+        if (name) {
+            $set.name = name;
         }
 
         await this.userModel
             .updateOne(
                 { _id: user._id },
                 {
-                    $set: {
-                        inviteStatus: UserInviteStatus.Assigned,
-                    },
+                    $set,
                 },
             )
             .exec();

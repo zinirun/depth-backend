@@ -119,7 +119,7 @@ type Mutation {
   createCompany(company: CreateCompanyInput!): Company!
   inviteUserToCompany(user: CreateUserInput!): Company!
   assignInviteWithPlain(id: ID!, input: AssignPlainUserInput!): User!
-  assignInviteWithOAuth(id: ID!): User!
+  assignInviteWithOAuth(id: ID!, name: String): User!
   createTask(task: CreateTaskInput!): Task!
   updateTask(task: UpdateTaskInput!): Task!
   deleteTask(id: ID!): ID!

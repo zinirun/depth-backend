@@ -1,7 +1,7 @@
 import { ApolloDriver } from '@nestjs/apollo';
 import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
-import { MongooseModule } from '@nestjs/mongoose';
+import { MongooseModule, MongooseModuleOptions } from '@nestjs/mongoose';
 import { config } from 'dotenv';
 import { join } from 'path';
 import { AppController } from './app.controller';
@@ -15,16 +15,33 @@ import { TaskModule } from './domains/task/task.module';
 
 config();
 
+const getDBUri = () => {
+    if (process.env.NODE_ENV === 'production' || +process.env.DEBUG_PROD) {
+        return `mongodb://${process.env.DOC_DB_USER}:${process.env.DOC_DB_PASS}@${process.env.DOC_DB_HOST}/?ssl=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`;
+    }
+    return `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}/${process.env.DB_NAME}?retryWrites=true&w=majority`;
+};
+
+const getDBOptions: () => MongooseModuleOptions = () => {
+    if (process.env.NODE_ENV === 'production' || +process.env.DEBUG_PROD) {
+        return {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            ssl: true,
+            sslValidate: true,
+            // sslCA: [readFileSync(`${__dirname}/../_ca/rds-combined-ca-bundle.pem`)] as any,
+            tlsCAFile: `${__dirname}/../_ca/rds-combined-ca-bundle.pem`,
+        };
+    }
+    return {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+    };
+};
+
 @Module({
     imports: [
-        MongooseModule.forRoot(
-            `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}/${process.env.DB_NAME}?retryWrites=true&w=majority`,
-            {
-                useNewUrlParser: true,
-                useUnifiedTopology: true,
-                // ssl: true,
-            },
-        ),
+        MongooseModule.forRoot(getDBUri(), getDBOptions()),
         GraphQLModule.forRoot({
             driver: ApolloDriver,
             autoSchemaFile: join(process.cwd(), 'src/schema.gql'),

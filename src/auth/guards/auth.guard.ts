@@ -2,6 +2,7 @@ import {
     CanActivate,
     ExecutionContext,
     Injectable,
+    NotAcceptableException,
     NotFoundException,
     UnauthorizedException,
 } from '@nestjs/common';
@@ -12,6 +13,8 @@ import { UserService } from 'src/domains/user/user.service';
 import { UserRole } from 'src/lib/enum/user-role.enum';
 import { ROLES_KEY } from '../decorators/user-roles.decorator';
 import { SYSTEM_AUTH } from '../decorators/system-auth.decorator';
+import { UserInviteStatus } from 'src/lib/enum/user-invite-status.enum';
+import { User } from 'src/schemas/user.schema';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -48,25 +51,36 @@ export class AuthGuard implements CanActivate {
         }
 
         if (token) {
+            let user: User;
             try {
                 const jwtPayload = this.userService.verifyToken(token);
-                const user = await this.userService.getOneOrThrowById(jwtPayload.userId);
-
-                // attach user data to request
-                request.user = user;
-
-                // check roles
-                const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>(ROLES_KEY, [
-                    context.getHandler(),
-                    context.getClass(),
-                ]);
-                if (!requiredRoles || requiredRoles.length === 0) {
-                    return true;
-                }
-                return requiredRoles.some((role) => user.role.includes(role));
+                user = await this.userService.getOneOrThrowById(jwtPayload.userId);
             } catch {
                 throw new UnauthorizedException();
             }
+
+            if (user.inviteStatus !== UserInviteStatus.Assigned) {
+                throw new NotAcceptableException({
+                    id: user._id,
+                    email: user.email,
+                    name: user.name,
+                    authType: user.authType,
+                    companyName: user.company.name,
+                });
+            }
+
+            // attach user data to request
+            request.user = user;
+
+            // check roles
+            const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>(ROLES_KEY, [
+                context.getHandler(),
+                context.getClass(),
+            ]);
+            if (!requiredRoles || requiredRoles.length === 0) {
+                return true;
+            }
+            return requiredRoles.some((role) => user.role.includes(role));
         } else {
             throw new UnauthorizedException('Empty credentials in your request');
         }
