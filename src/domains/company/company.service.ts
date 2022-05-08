@@ -13,6 +13,7 @@ import { CreateCompanyInput } from './dto/create-company-input.dto';
 import { User } from 'src/schemas/user.schema';
 import { UserService } from '../user/user.service';
 import { CreateUserInput } from '../user/dto/create-user-input.dto';
+import { transaction } from 'src/lib/util/transaction';
 
 @Injectable()
 export class CompanyService {
@@ -33,20 +34,12 @@ export class CompanyService {
 
         const company = await this.getOneOrThrowById(requester.company._id);
 
-        const session = await this.connection.startSession();
-        session.startTransaction();
-        try {
+        await transaction<void>(this.connection, async (session) => {
             const newUser = await this.userService.createByCompany(company, user, session);
             await this.addExistingUser(company, newUser, session);
-            await session.commitTransaction();
-            return await this.getOneOrThrowById(company._id);
-        } catch (err) {
-            console.error(err);
-            session.abortTransaction();
-            throw new InternalServerErrorException('Transaction aborted');
-        } finally {
-            session.endSession();
-        }
+        });
+
+        return await this.getOneOrThrowById(company._id);
     }
 
     async addExistingUser(company: Company, user: User, session?: ClientSession): Promise<boolean> {

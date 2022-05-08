@@ -1,0 +1,30 @@
+{
+    "executionRoleArn": "arn:aws:iam::416849462746:role/ecsTaskExecutionRole",
+    "containerDefinitions": [
+        {
+            "name": "depth-backend-container",
+            "image": "<IMAGE_URL>",
+            "essential": true,
+            "portMappings": [
+                {
+                    "hostPort": 0,
+                    "protocol": "tcp",
+                    "containerPort": 7000
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/depth-backend-task",
+                    "awslogs-region": "ap-northeast-2",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ],
+    "requiresCompatibilities": ["EC2"],
+    "networkMode": "bridge",
+    "cpu": "512",
+    "memory": "1024",
+    "family": "depth-backend-task"
+}

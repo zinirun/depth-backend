@@ -1,11 +1,6 @@
-import {
-    BadRequestException,
-    Injectable,
-    InternalServerErrorException,
-    NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
+import mongoose, { Connection } from 'mongoose';
 import { User } from 'src/schemas/user.schema';
 import { SoftDeleteModel } from 'src/lib/plugins/soft-delete.plugin';
 import { Task, TaskDocument } from 'src/schemas/task.schema';
@@ -18,6 +13,7 @@ import { TaskComment, TaskCommentDocument } from 'src/schemas/task-comment.schem
 import { CreateTaskCommentInput } from './dto/create-task-comment-input.dto';
 import { UpdateTaskCommentInput } from './dto/update-task-comment-input.dto';
 import arrayMove from 'src/lib/util/array-move';
+import { transaction } from 'src/lib/util/transaction';
 
 @Injectable()
 export class TaskService {
@@ -50,34 +46,22 @@ export class TaskService {
             involvedUsers,
         });
 
-        const session = await this.connection.startSession();
-        session.startTransaction();
-
-        try {
+        const _id = await transaction<string>(this.connection, async (session) => {
             if (parentTaskId) {
                 // task level; sub task (not top depth)
                 const { _id } = await newTask.save({ session });
                 await this.addChild(parentTaskId, _id, sortIndex, session);
-
-                await session.commitTransaction();
-                await this.projectService.updateTaskUpdatedAt(projectId);
-                return await this.getOneOrThrowById(_id);
+                return _id;
             } else {
                 // project level; task (top depth)
                 const { _id } = await newTask.save({ session });
                 await this.projectService.addTopChild(project, _id, sortIndex, session);
-
-                await session.commitTransaction();
-                await this.projectService.updateTaskUpdatedAt(projectId);
-                return await this.getOneOrThrowById(_id);
+                return _id;
             }
-        } catch (err) {
-            console.error(err);
-            session.abortTransaction();
-            throw new InternalServerErrorException('Transaction aborted');
-        } finally {
-            session.endSession();
-        }
+        });
+
+        await this.projectService.updateTaskUpdatedAt(projectId);
+        return await this.getOneOrThrowById(_id);
     }
 
     async getOneOrThrowById(id: string): Promise<Task> {
@@ -144,6 +128,32 @@ export class TaskService {
             (a, b) =>
                 $in.findIndex((id) => a._id.equals(id)) - $in.findIndex((id) => b._id.equals(id)),
         );
+    }
+
+    async getAllInvolvedByDateAndUserId(userId: string): Promise<Task[]> {
+        const authoredTasks = await this.taskModel
+            .find({
+                author: userId,
+            })
+            .populate('author')
+            .populate('project')
+            .populate('children')
+            .populate('involvedUsers')
+            .populate('comments')
+            .lean()
+            .exec();
+        const involvedTasks = await this.taskModel
+            .find({
+                involvedUsers: new mongoose.Types.ObjectId(userId),
+            })
+            .populate('author')
+            .populate('project')
+            .populate('children')
+            .populate('involvedUsers')
+            .populate('comments')
+            .lean()
+            .exec();
+        return involvedTasks;
     }
 
     async update(input: UpdateTaskInput, user: User): Promise<Task> {
@@ -213,9 +223,7 @@ export class TaskService {
             content,
         });
 
-        const session = await this.connection.startSession();
-        session.startTransaction();
-        try {
+        const newCommentId = await transaction<string>(this.connection, async (session) => {
             const { _id: newCommentId } = await newComment.save({ session });
             await this.taskModel
                 .updateOne(
@@ -230,15 +238,10 @@ export class TaskService {
                 )
                 .session(session)
                 .exec();
-            await session.commitTransaction();
-            return await this.getOneCommentOrThrowById(newCommentId);
-        } catch (err) {
-            console.error(err);
-            session.abortTransaction();
-            throw new InternalServerErrorException('Transaction aborted');
-        } finally {
-            session.endSession();
-        }
+            return newCommentId;
+        });
+
+        return await this.getOneCommentOrThrowById(newCommentId);
     }
 
     async getOneCommentOrThrowById(id: string): Promise<TaskComment> {
@@ -428,9 +431,7 @@ export class TaskService {
                     ];
                 }
 
-                const session = await this.connection.startSession();
-                session.startTransaction();
-                try {
+                await transaction<void>(this.connection, async (session) => {
                     await this.removeChild(fromParent, childId, session);
                     await this.taskModel
                         .updateOne(
@@ -445,58 +446,32 @@ export class TaskService {
                         )
                         .session(session)
                         .exec();
-                    await session.commitTransaction();
-                    return [
-                        await this.getOneOrThrowById(fromParentId),
-                        await this.getOneOrThrowById(toParentId),
-                    ];
-                } catch (err) {
-                    console.error(err);
-                    session.abortTransaction();
-                    throw new InternalServerErrorException('Transaction aborted');
-                } finally {
-                    session.endSession();
-                }
+                });
+
+                return [
+                    await this.getOneOrThrowById(fromParentId),
+                    await this.getOneOrThrowById(toParentId),
+                ];
             }
         } else {
             // move in include-top-depth tasks
             if (!fromParentId && toParentId) {
                 // from: top-depth, to: not-top-depth
-                const session = await this.connection.startSession();
-                session.startTransaction();
-                try {
+
+                const updated = await transaction<Task>(this.connection, async (session) => {
                     await this.projectService.removeTopChild(project, childId, session);
-                    const updated = await this.addChildByPlainTask(
-                        toParent,
-                        childId,
-                        sortIndex,
-                        session,
-                    );
-                    await session.commitTransaction();
-                    return [updated];
-                } catch (err) {
-                    console.error(err);
-                    session.abortTransaction();
-                    throw new InternalServerErrorException('Transaction aborted');
-                } finally {
-                    session.endSession();
-                }
+                    return await this.addChildByPlainTask(toParent, childId, sortIndex, session);
+                });
+
+                return [updated];
             } else if (fromParentId && !toParentId) {
                 // from: not-top-depth, to: top-depth
-                const session = await this.connection.startSession();
-                session.startTransaction();
-                try {
+                await transaction<void>(this.connection, async (session) => {
                     await this.removeChild(fromParent, childId, session);
                     await this.projectService.addTopChild(project, childId, sortIndex, session);
-                    await session.commitTransaction();
-                    return [await this.getOneOrThrowById(fromParentId)];
-                } catch (err) {
-                    console.error(err);
-                    session.abortTransaction();
-                    throw new InternalServerErrorException('Transaction aborted');
-                } finally {
-                    session.endSession();
-                }
+                });
+
+                return [await this.getOneOrThrowById(fromParentId)];
             } else {
                 // from: top-depth, to: top-depth
                 await this.projectService.sortTopChild(project, childId, sortIndex);

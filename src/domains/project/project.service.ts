@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { Project, ProjectDocument } from 'src/schemas/project.schema';
@@ -78,7 +78,7 @@ export class ProjectService {
     }
 
     async update(input: UpdateProjectInput, requesterId: string): Promise<Project> {
-        const { id, title } = input;
+        const { id, title, accesses } = input;
         const project = await this.getOneOrThrowById(id);
         this.throwIfIsNotManager(project, requesterId);
 
@@ -90,6 +90,7 @@ export class ProjectService {
                 {
                     $set: {
                         title,
+                        accesses,
                     },
                 },
             )

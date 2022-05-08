@@ -41,6 +41,13 @@ export class TaskResolver {
         return await this.taskService.getAllByProjectIdAndUserId(projectId, user._id);
     }
 
+    @Query(() => [Task], {
+        name: 'myTasks',
+    })
+    async getAllInvolvedByDate(@GetUser() user: User): Promise<Task[]> {
+        return await this.taskService.getAllInvolvedByDateAndUserId(user._id);
+    }
+
     @Mutation(() => Task, {
         name: 'updateTask',
     })

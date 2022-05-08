@@ -101,6 +101,7 @@ type Query {
   logout: Boolean!
   task(id: ID!): Task!
   tasksByProjectId(projectId: ID!): [Task!]!
+  myTasks: [Task!]!
 }
 
 input LoginInput {
@@ -137,6 +138,7 @@ input CreateProjectInput {
 input UpdateProjectInput {
   id: String!
   title: String!
+  accesses: [ID!]!
 }
 
 input CreateCompanyInput {
