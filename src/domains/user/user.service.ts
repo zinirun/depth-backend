@@ -25,6 +25,7 @@ import { AssignPlainUserInput } from './dto/assign-plain-user-input.dto';
 import { UserInviteStatus } from 'src/lib/enum/user-invite-status.enum';
 import { UserRole } from 'src/lib/enum/user-role.enum';
 import { UserAuthType } from 'src/lib/enum/user-auth-type.enum';
+import { UpdateUserInput } from './dto/update-user-input.dto';
 
 @Injectable()
 export class UserService {
@@ -77,6 +78,17 @@ export class UserService {
             });
         }
 
+        const { NODE_ENV, LOCAL_CLIENT_URL, CLIENT_URL } = process.env;
+
+        if (!req.user._id) {
+            res.redirect(
+                `${NODE_ENV === 'local' ? LOCAL_CLIENT_URL : CLIENT_URL}/login?notfound=${
+                    req.user
+                }`,
+            );
+            return;
+        }
+
         try {
             const {
                 _id: userId,
@@ -87,7 +99,6 @@ export class UserService {
             const token = this.createToken({ userId, companyId, role, email });
             res.cookie('x-access', token, { httpOnly: true });
 
-            const { NODE_ENV, LOCAL_CLIENT_URL, CLIENT_URL } = process.env;
             res.redirect(`${NODE_ENV === 'local' ? LOCAL_CLIENT_URL : CLIENT_URL}/workspace`);
         } catch (err) {
             throw new UnauthorizedException();
@@ -96,9 +107,8 @@ export class UserService {
 
     async getOneOrUpdateOAuth(input: OAuthInput): Promise<User> {
         const { email, ...$set } = input;
-
-        const user = await this.getOneOrThrowByEmail(email);
-        if (!user.oauthId) {
+        const user = await this.getOneByEmail(email);
+        if (user && !user.oauthId) {
             await this.userModel
                 .updateOne(
                     { _id: user._id },
@@ -112,7 +122,11 @@ export class UserService {
     }
 
     async getOneOrThrowById(id: string): Promise<User> {
-        const user = await this.userModel.findById(id).populate('company').lean().exec();
+        const user = await this.userModel
+            .findById(id)
+            .populate({ path: 'company', populate: [{ path: 'users' }] })
+            .lean()
+            .exec();
         if (!user) {
             throw new NotFoundException('User not exists');
         }
@@ -120,11 +134,19 @@ export class UserService {
     }
 
     async getOneOrThrowByEmail(email: string): Promise<User> {
-        const user = await this.userModel.findOne({ email }).populate('company').lean().exec();
+        const user = await this.userModel
+            .findOne({ email })
+            .populate({ path: 'company', populate: [{ path: 'users' }] })
+            .lean()
+            .exec();
         if (!user) {
             throw new NotFoundException('User not exists');
         }
         return user;
+    }
+
+    async getOneByEmail(email: string): Promise<User> {
+        return await this.userModel.findOne({ email }).populate('company').lean().exec();
     }
 
     async createByCompany(
@@ -136,6 +158,74 @@ export class UserService {
         const newUser = new this.userModel(input);
         newUser.company = company;
         return await newUser.save({ session });
+    }
+
+    async update(input: UpdateUserInput, requester: User): Promise<User> {
+        const { id, ...userInput } = input;
+        const user = await this.getOneOrThrowById(id);
+
+        if (
+            String(user._id) !== String(requester._id) &&
+            !(requester.company._id === user.company._id && requester.role === UserRole.Admin)
+        ) {
+            throw new UnauthorizedException();
+        }
+
+        let $set: Record<string, any> = {};
+
+        const { name, role } = userInput;
+        if (name) {
+            $set.name = name;
+        }
+        if (
+            role &&
+            requester.company._id === user.company._id &&
+            requester.role === UserRole.Admin
+        ) {
+            $set.role = role;
+        }
+
+        await this.userModel
+            .updateOne(
+                {
+                    _id: id,
+                },
+                { $set },
+            )
+            .exec();
+
+        return await this.getOneOrThrowById(id);
+    }
+
+    async removeByCompanyAdmin(
+        id: string,
+        requester: User,
+        session?: ClientSession,
+    ): Promise<string> {
+        const user = await this.getOneOrThrowById(id);
+        if (requester.role === UserRole.Admin && user.company._id !== requester.company._id) {
+            throw new UnauthorizedException();
+        }
+        await this.userModel.softDelete(
+            {
+                _id: id,
+            },
+            {
+                session,
+            },
+        );
+        return id;
+    }
+
+    async restoreByCompanyAdmin(id: string, requester: User): Promise<string> {
+        const user = await this.getOneOrThrowById(id);
+        if (requester.role === UserRole.Admin && user.company._id !== requester.company._id) {
+            throw new UnauthorizedException();
+        }
+        await this.userModel.restore({
+            _id: id,
+        });
+        return id;
     }
 
     async assignInviteWithPlain(userId: string, input: AssignPlainUserInput): Promise<User> {

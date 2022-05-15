@@ -17,22 +17,12 @@ config();
 
 const getDBUri = () => {
     if (process.env.NODE_ENV === 'production' || +process.env.DEBUG_PROD) {
-        return `mongodb://${process.env.DOC_DB_USER}:${process.env.DOC_DB_PASS}@${process.env.DOC_DB_HOST}/?ssl=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`;
+        return `mongodb+srv://${process.env.PROD_DB_USER}:${process.env.PROD_DB_PASS}@${process.env.PROD_DB_HOST}/${process.env.PROD_DB_NAME}?retryWrites=true&w=majority`;
     }
     return `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}/${process.env.DB_NAME}?retryWrites=true&w=majority`;
 };
 
 const getDBOptions: () => MongooseModuleOptions = () => {
-    if (process.env.NODE_ENV === 'production' || +process.env.DEBUG_PROD) {
-        return {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            ssl: true,
-            sslValidate: true,
-            // sslCA: [readFileSync(`${__dirname}/../_ca/rds-combined-ca-bundle.pem`)] as any,
-            tlsCAFile: `${__dirname}/../_ca/rds-combined-ca-bundle.pem`,
-        };
-    }
     return {
         useNewUrlParser: true,
         useUnifiedTopology: true,

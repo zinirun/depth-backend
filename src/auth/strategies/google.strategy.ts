@@ -32,7 +32,11 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         });
     }
 
-    async validate(_accessToken: string, _refreshToken: string, profile: Profile): Promise<User> {
+    async validate(
+        _accessToken: string,
+        _refreshToken: string,
+        profile: Profile,
+    ): Promise<User | string> {
         const {
             provider: oauthProvider,
             id: oauthId,
@@ -48,9 +52,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
             authType: UserAuthType.Google,
         };
         const user = await this.userService.getOneOrUpdateOAuth(oauthInput);
-        if (!user) {
-            throw new UnauthorizedException();
-        }
+        if (!user) return oauthInput.email;
         return user;
     }
 }

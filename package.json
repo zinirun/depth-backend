@@ -13,7 +13,7 @@
         "start:local": "NODE_ENV=local TZ=UTC nest start --watch",
         "start:debug": "NODE_ENV=local TZ=UTC nest start --debug --watch",
         "start:dev": "NODE_ENV=development TZ=UTC pm2-docker start ./deployments/ecosystem.config.dev.json",
-        "start:prod": "node dist/main",
+        "start:prod": "NODE_ENV=production node dist/main",
         "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
         "test": "jest",
         "test:watch": "jest --watch",

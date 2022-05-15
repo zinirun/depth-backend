@@ -14,6 +14,9 @@ import { CreateTaskCommentInput } from './dto/create-task-comment-input.dto';
 import { UpdateTaskCommentInput } from './dto/update-task-comment-input.dto';
 import arrayMove from 'src/lib/util/array-move';
 import { transaction } from 'src/lib/util/transaction';
+import { MyTasks } from './dto/my-tasks.dto';
+import { TaskStatus } from 'src/lib/enum/task-status.enum';
+import * as moment from 'moment';
 
 @Injectable()
 export class TaskService {
@@ -130,30 +133,82 @@ export class TaskService {
         );
     }
 
-    async getAllInvolvedByDateAndUserId(userId: string): Promise<Task[]> {
-        const authoredTasks = await this.taskModel
+    async getAllInvolvedByDateAndUserId(userId: string): Promise<MyTasks> {
+        const _today = moment().startOf('day');
+        const dateCondition = {
+            today: {
+                $gte: _today.toDate(),
+                $lte: moment(_today).endOf('day').toDate(),
+            },
+            thisWeek: {
+                $gte: moment().startOf('week').toDate(),
+                $lte: moment(_today).endOf('week').toDate(),
+            },
+            lastDays: (day: number) => ({
+                $gte: moment().subtract(day, 'd').startOf('day').toDate(),
+                $lte: moment(_today).endOf('day').toDate(),
+            }),
+        };
+        const today = await this.getInvolvedOrAuthoredTasksWithLastDepth(userId, [
+            {
+                'deadline.to': {
+                    $lte: dateCondition.today.$lte,
+                },
+            },
+        ]);
+        const thisWeek = await this.getInvolvedOrAuthoredTasksWithLastDepth(userId, [
+            {
+                'deadline.to': {
+                    $lte: dateCondition.thisWeek.$lte,
+                },
+            },
+        ]);
+        const recent = await this.getInvolvedOrAuthoredTasksWithLastDepth(userId, [
+            {
+                createdAt: dateCondition.lastDays(3),
+            },
+        ]);
+        return {
+            today,
+            thisWeek,
+            recent,
+        };
+    }
+
+    async getInvolvedOrAuthoredTasksWithLastDepth(
+        userId: string,
+        andCondition?: mongoose.FilterQuery<TaskDocument>[],
+    ): Promise<Task[]> {
+        return await this.taskModel
             .find({
-                author: userId,
+                $or: [
+                    {
+                        author: userId,
+                    },
+                    {
+                        involvedUsers: new mongoose.Types.ObjectId(userId),
+                    },
+                ],
+                $and: [
+                    {
+                        children: { $size: 0 },
+                    },
+                    {
+                        status: { $ne: TaskStatus.Done },
+                    },
+                    {
+                        title: { $ne: '' },
+                    },
+                    ...andCondition,
+                ],
             })
             .populate('author')
             .populate('project')
-            .populate('children')
+            // .populate('children')
             .populate('involvedUsers')
             .populate('comments')
             .lean()
             .exec();
-        const involvedTasks = await this.taskModel
-            .find({
-                involvedUsers: new mongoose.Types.ObjectId(userId),
-            })
-            .populate('author')
-            .populate('project')
-            .populate('children')
-            .populate('involvedUsers')
-            .populate('comments')
-            .lean()
-            .exec();
-        return involvedTasks;
     }
 
     async update(input: UpdateTaskInput, user: User): Promise<Task> {

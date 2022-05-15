@@ -91,6 +91,12 @@ enum TaskStatus {
   Done
 }
 
+type MyTasks {
+  today: [Task!]!
+  thisWeek: [Task!]!
+  recent: [Task!]!
+}
+
 type Query {
   project(id: ID!): Project!
   projects: [Project!]!
@@ -101,7 +107,7 @@ type Query {
   logout: Boolean!
   task(id: ID!): Task!
   tasksByProjectId(projectId: ID!): [Task!]!
-  myTasks: [Task!]!
+  myTasks: MyTasks!
 }
 
 input LoginInput {
@@ -118,6 +124,8 @@ type Mutation {
   disinviteProject(id: ID!, userIds: [ID!]!): Project!
   createCompany(company: CreateCompanyInput!): Company!
   inviteUserToCompany(user: CreateUserInput!): Company!
+  removeUser(id: ID!): Company!
+  updateMe(input: UpdateUserInput!): User!
   assignInviteWithPlain(id: ID!, input: AssignPlainUserInput!): User!
   assignInviteWithOAuth(id: ID!, name: String): User!
   createTask(task: CreateTaskInput!): Task!
@@ -149,6 +157,12 @@ input CreateCompanyInput {
 input CreateUserInput {
   email: String!
   role: UserRole!
+}
+
+input UpdateUserInput {
+  id: ID!
+  name: String
+  role: UserRole
 }
 
 input AssignPlainUserInput {

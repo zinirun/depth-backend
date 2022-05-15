@@ -6,6 +6,7 @@ import { User } from 'src/schemas/user.schema';
 import { CreateTaskCommentInput } from './dto/create-task-comment-input.dto';
 import { CreateTaskInput } from './dto/create-task-input.dto';
 import { MoveTaskChildInput } from './dto/move-task-child-input.dto';
+import { MyTasks } from './dto/my-tasks.dto';
 import { UpdateTaskCommentInput } from './dto/update-task-comment-input.dto';
 import { UpdateTaskInput } from './dto/update-task-input.dto';
 import { TaskService } from './task.service';
@@ -41,10 +42,10 @@ export class TaskResolver {
         return await this.taskService.getAllByProjectIdAndUserId(projectId, user._id);
     }
 
-    @Query(() => [Task], {
+    @Query(() => MyTasks, {
         name: 'myTasks',
     })
-    async getAllInvolvedByDate(@GetUser() user: User): Promise<Task[]> {
+    async getAllInvolvedByDate(@GetUser() user: User): Promise<MyTasks> {
         return await this.taskService.getAllInvolvedByDateAndUserId(user._id);
     }
 

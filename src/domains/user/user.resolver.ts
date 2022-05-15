@@ -5,6 +5,7 @@ import { GetUser } from 'src/lib/decorators/get-user.decorator';
 import { User } from 'src/schemas/user.schema';
 import { AssignPlainUserInput } from './dto/assign-plain-user-input.dto';
 import { LoginInput } from './dto/login-input.dto';
+import { UpdateUserInput } from './dto/update-user-input.dto';
 import { UserService } from './user.service';
 
 @Resolver()
@@ -25,7 +26,14 @@ export class UserResolver {
         name: 'me',
     })
     async verify(@GetUser() user: User): Promise<User> {
-        return user;
+        return await this.userService.getOneOrThrowById(user._id);
+    }
+
+    @Mutation(() => User, {
+        name: 'updateMe',
+    })
+    async update(@GetUser() user: User, @Args('input') input: UpdateUserInput): Promise<User> {
+        return await this.userService.update(input, user);
     }
 
     @SkipAuth()

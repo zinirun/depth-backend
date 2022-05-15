@@ -42,7 +42,25 @@ export class CompanyService {
         return await this.getOneOrThrowById(company._id);
     }
 
-    async addExistingUser(company: Company, user: User, session?: ClientSession): Promise<boolean> {
+    async deleteUser(requester: User, userId: string): Promise<Company> {
+        this.userService.throwIfIsNotAdmin(requester);
+
+        const company = await this.getOneOrThrowById(requester.company._id);
+        const user = await this.userService.getOneOrThrowById(userId);
+
+        await transaction<void>(this.connection, async (session) => {
+            await this.userService.removeByCompanyAdmin(userId, requester, session);
+            await this.deleteExistingUser(company, userId, session);
+        });
+
+        return await this.getOneOrThrowById(company._id);
+    }
+
+    private async addExistingUser(
+        company: Company,
+        user: User,
+        session?: ClientSession,
+    ): Promise<boolean> {
         return (
             (await this.companyModel
                 .updateOne(
@@ -50,6 +68,28 @@ export class CompanyService {
                     {
                         $set: {
                             users: [...company.users, user],
+                        },
+                    },
+                )
+                .session(session || undefined)
+                .exec()) && true
+        );
+    }
+
+    private async deleteExistingUser(
+        company: Company,
+        userId: string,
+        session?: ClientSession,
+    ): Promise<boolean> {
+        return (
+            (await this.companyModel
+                .updateOne(
+                    { _id: company._id },
+                    {
+                        $set: {
+                            users: company.users.filter(
+                                (user) => String(user._id) !== String(userId),
+                            ),
                         },
                     },
                 )
