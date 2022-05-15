@@ -1,7 +1,7 @@
 import { ApolloDriver } from '@nestjs/apollo';
 import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
-import { MongooseModule, MongooseModuleOptions } from '@nestjs/mongoose';
+import { MongooseModule } from '@nestjs/mongoose';
 import { config } from 'dotenv';
 import { join } from 'path';
 import { AppController } from './app.controller';
@@ -22,16 +22,12 @@ const getDBUri = () => {
     return `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}/${process.env.DB_NAME}?retryWrites=true&w=majority`;
 };
 
-const getDBOptions: () => MongooseModuleOptions = () => {
-    return {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    };
-};
-
 @Module({
     imports: [
-        MongooseModule.forRoot(getDBUri(), getDBOptions()),
+        MongooseModule.forRoot(getDBUri(), {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+        }),
         GraphQLModule.forRoot({
             driver: ApolloDriver,
             autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
